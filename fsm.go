@@ -204,6 +204,10 @@ func (f *FSM) Trigger(event Event, args ...any) bool {
 	if _, ok := f.transitionTable.GetNextState(current, event); !ok {
 		return false
 	}
+	// 通过判断调用栈确定是否迭代调用此函数，如果是，则需要跳过
+	if IsRecursiveCall() {
+		panic("FSM.Trigger dosen't support recursive call")
+	}
 	f.eventLock.Lock()
 	defer f.eventLock.Unlock()
 	for {
