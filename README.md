@@ -113,7 +113,7 @@ fsmInstance := fsm.NewFSM("my-fsm", StateIdle, table, nil)
 ### 注册回调函数
 
 ```go
-table.RegisterCallback(fsm.EnterState, StateRunning, func(f *fsm.FSM, from, to fsm.State, event fsm.Event, args ...interface{}) {
+table.RegisterCallback(fsm.EnterState, StateRunning, func(f *fsm.FSM, from, to fsm.State, event fsm.Event, args ...any) {
     fmt.Printf("Entered running state from %d\n", from)
 })
 ```

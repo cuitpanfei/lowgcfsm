@@ -26,7 +26,7 @@ type Transition struct {
 }
 
 // Handler 业务逻辑处理函数类型
-type Handler func(fsm *FSM, from State, to State, event Event, args ...interface{})
+type Handler func(fsm *FSM, from State, to State, event Event, args ...any)
 
 // CallbackType 回调类型
 type CallbackType int
@@ -172,15 +172,14 @@ func (t *ArrayTransitionTable) GetCallback(cbType CallbackType, state State, eve
 
 // FSM 有限状态机实例
 type FSM struct {
-	state           int32 // 使用int32保证原子操作
+	id              uint32 // 状态机ID，用于标识
+	state           int32  // 使用int32保证原子操作
 	transitionTable *ArrayTransitionTable
-	data            interface{} // 用户自定义数据，可用于存储业务状态
-	id              string      // 状态机ID，用于标识
-	mu              sync.Mutex  // 锁
+	eventLock       sync.Mutex // Event锁
 }
 
 // NewFSM 创建新的状态机实例
-func NewFSM(id string, initialState State, transitionTable *ArrayTransitionTable, data interface{}) *FSM {
+func NewFSM(id uint32, initialState State, transitionTable *ArrayTransitionTable) *FSM {
 	return &FSM{
 		state:           int32(initialState),
 		transitionTable: transitionTable,
@@ -194,20 +193,21 @@ func (f *FSM) CurrentState() State {
 }
 
 // ID 获取状态机ID
-func (f *FSM) ID() string {
+func (f *FSM) ID() uint32 {
 	return f.id
 }
 
 // Trigger 触发事件（原子状态切换）
-func (f *FSM) Trigger(event Event, args ...interface{}) bool {
+func (f *FSM) Trigger(event Event, args ...any) bool {
 	// 先检查状态是否匹配，避免不必要的锁竞争
 	current := f.CurrentState()
 	if _, ok := f.transitionTable.GetNextState(current, event); !ok {
 		return false
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.eventLock.Lock()
+	defer f.eventLock.Unlock()
 	for {
+		// 再次检查状态是否匹配
 		current := f.CurrentState()
 		nextState, ok := f.transitionTable.GetNextState(current, event)
 		if !ok {
@@ -238,7 +238,8 @@ func (f *FSM) Trigger(event Event, args ...interface{}) bool {
 
 			return true
 		}
-		// 如果CAS失败，说明状态已被其他goroutine修改，重试
+		// 在有锁的情况下，理论不会走到这里。
+		// 但是，如果CAS失败，说明状态已被其他goroutine修改，需要重试
 	}
 }
 
@@ -264,7 +265,7 @@ func NewFsmPool(size int, initialState State, transitionTable *ArrayTransitionTa
 		pool.pool[i] = FSM{
 			state:           int32(initialState),
 			transitionTable: transitionTable,
-			id:              fmt.Sprintf("fsm-%d", i),
+			id:              uint32(i),
 		}
 		pool.freeIndices = append(pool.freeIndices, i)
 	}

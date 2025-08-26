@@ -1,6 +1,7 @@
 package fsm_test
 
 import (
+	"runtime"
 	"testing"
 
 	fsm "github.com/cuitpanfei/lowgcfsm"
@@ -38,7 +39,7 @@ func createTestTransitionTable() *fsm.ArrayTransitionTable {
 // 测试基本状态转移
 func TestBasicTransitions(t *testing.T) {
 	table := createTestTransitionTable()
-	fsmInstance := fsm.NewFSM("test", StateIdle, table, nil)
+	fsmInstance := fsm.NewFSM(0, StateIdle, table)
 
 	// 初始状态应为Idle
 	if fsmInstance.CurrentState() != StateIdle {
@@ -86,7 +87,7 @@ func TestBasicTransitions(t *testing.T) {
 // 测试回调函数
 func TestCallbacks(t *testing.T) {
 	table := createTestTransitionTable()
-	fsmInstance := fsm.NewFSM("test", StateIdle, table, nil)
+	fsmInstance := fsm.NewFSM(0, StateIdle, table)
 
 	var (
 		beforeEventCalled bool
@@ -96,28 +97,28 @@ func TestCallbacks(t *testing.T) {
 	)
 
 	// 注册回调函数
-	table.RegisterCallback(fsm.BeforeEvent, StateIdle, EventStart, func(f *fsm.FSM, from, to fsm.State, event fsm.Event, args ...interface{}) {
+	table.RegisterCallback(fsm.BeforeEvent, StateIdle, EventStart, func(f *fsm.FSM, from, to fsm.State, event fsm.Event, args ...any) {
 		beforeEventCalled = true
 		if from != StateIdle || to != StateRunning || event != EventStart {
 			t.Error("BeforeEvent callback received wrong parameters")
 		}
 	})
 
-	table.RegisterCallback(fsm.AfterEvent, StateIdle, EventStart, func(f *fsm.FSM, from, to fsm.State, event fsm.Event, args ...interface{}) {
+	table.RegisterCallback(fsm.AfterEvent, StateIdle, EventStart, func(f *fsm.FSM, from, to fsm.State, event fsm.Event, args ...any) {
 		afterEventCalled = true
 		if from != StateIdle || to != StateRunning || event != EventStart {
 			t.Error("AfterEvent callback received wrong parameters")
 		}
 	})
 
-	table.RegisterCallback(fsm.LeaveState, StateIdle, EventStart, func(f *fsm.FSM, from, to fsm.State, event fsm.Event, args ...interface{}) {
+	table.RegisterCallback(fsm.LeaveState, StateIdle, EventStart, func(f *fsm.FSM, from, to fsm.State, event fsm.Event, args ...any) {
 		leaveStateCalled = true
 		if from != StateIdle || to != StateRunning || event != EventStart {
 			t.Error("LeaveState callback received wrong parameters")
 		}
 	})
 
-	table.RegisterCallback(fsm.EnterState, StateRunning, EventStart, func(f *fsm.FSM, from, to fsm.State, event fsm.Event, args ...interface{}) {
+	table.RegisterCallback(fsm.EnterState, StateRunning, EventStart, func(f *fsm.FSM, from, to fsm.State, event fsm.Event, args ...any) {
 		enterStateCalled = true
 		if from != StateIdle || to != StateRunning || event != EventStart {
 			t.Error("EnterState callback received wrong parameters")
@@ -184,7 +185,7 @@ func TestFsmPool(t *testing.T) {
 // 测试并发安全性
 func TestConcurrentAccess(t *testing.T) {
 	table := createTestTransitionTable()
-	fsmInstance := fsm.NewFSM("concurrent-test", StateIdle, table, nil)
+	fsmInstance := fsm.NewFSM(0, StateIdle, table)
 
 	// 启动多个goroutine同时触发事件
 	done := make(chan bool, 10)
@@ -217,7 +218,7 @@ func TestConcurrentAccess(t *testing.T) {
 // 基准测试：状态转移性能
 func BenchmarkStateTransition(b *testing.B) {
 	table := createTestTransitionTable()
-	fsmInstance := fsm.NewFSM("benchmark", StateIdle, table, nil)
+	fsmInstance := fsm.NewFSM(0, StateIdle, table)
 	for b.Loop() {
 		fsmInstance.Trigger(EventStart)
 		fsmInstance.Trigger(EventPause)
@@ -229,7 +230,7 @@ func BenchmarkStateTransition(b *testing.B) {
 // 基准测试：并发状态转移性能
 func BenchmarkConcurrentStateTransition(b *testing.B) {
 	table := createTestTransitionTable()
-	fsmInstance := fsm.NewFSM("concurrent-benchmark", StateIdle, table, nil)
+	fsmInstance := fsm.NewFSM(0, StateIdle, table)
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
@@ -256,4 +257,12 @@ func BenchmarkFsmPoolAllocation(b *testing.B) {
 		}
 	}
 	b.ReportMetric(float64(j)/float64(i), "allocated")
+}
+
+func TestCreateFsmPool(t *testing.T) {
+	pool := fsm.NewFsmPool(10000, StateIdle, createTestTransitionTable())
+	_ = pool
+	var stats runtime.MemStats
+	runtime.ReadMemStats(&stats)
+	t.Logf("Allocated: %d KB", stats.Alloc/1024)
 }
